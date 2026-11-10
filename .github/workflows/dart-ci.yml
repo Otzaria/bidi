@@ -27,3 +27,14 @@ jobs:
       - name: Plain Hebrew benchmark smoke run
         run: dart run benchmark/plain_hebrew_benchmark.dart
 
+      - name: Optimized ASCII routing benchmark
+        run: dart run benchmark/ascii_separator_routing_benchmark.dart
+      - name: Baseline benchmark on same runner
+        run: |
+          git fetch origin main --depth=1
+          git worktree add --detach /tmp/bidi-ascii-baseline FETCH_HEAD
+          mkdir -p /tmp/bidi-ascii-baseline/benchmark
+          cp benchmark/ascii_separator_routing_benchmark.dart /tmp/bidi-ascii-baseline/benchmark/
+          cd /tmp/bidi-ascii-baseline
+          flutter pub get
+          dart run benchmark/ascii_separator_routing_benchmark.dart
