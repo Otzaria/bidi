@@ -2,6 +2,25 @@ import 'package:bidi/bidi.dart' as bidi;
 import 'package:test/test.dart';
 
 void main() {
+  test('combined ASCII, scalars, controls and shaping keep global source spans',
+      () {
+    void check(
+        String source, String expected, List<int> indices, List<int> spans) {
+      final actualIndices = <int>[];
+      final actualSpans = <int>[];
+      expect(
+          bidi.logicalToVisual2(source, actualIndices, actualSpans), expected);
+      expect(actualIndices, indices);
+      expect(actualSpans, spans);
+    }
+
+    check('A\nאב😀ג\nB', 'A\nג😀בא\nB', [0, 1, 6, 4, 3, 2, 7, 8],
+        [1, 1, 1, 2, 1, 1, 1, 1]);
+    check('a\u200E😀b', 'a😀b', [0, 2, 4], [1, 2, 1]);
+    check('ASCII\nلاX\nB', 'ASCII\nXﻻ\nB', [0, 1, 2, 3, 4, 5, 8, 6, 9, 10],
+        [1, 1, 1, 1, 1, 1, 1, 2, 1, 1]);
+  });
+
   test('global UTF-16 positions include paragraph separators', () {
     final indexes = <int>[];
     final lengths = <int>[];
