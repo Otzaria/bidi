@@ -132,9 +132,15 @@ class Paragraph {
     final dosStack = _Stack<DirectionOverride>();
     _Stack<int> elStack = _Stack<int>();
     int idx = 0;
+    var hasBracket = false;
     for (int i = 0; i < text.length; ++i) {
       bool x9Char = false;
       final c = text[i];
+      if (c == 0x28 || c == 0x29 ||
+          c == 0x5B || c == 0x5D ||
+          c == 0x7B || c == 0x7D) {
+        hasBracket = true;
+      }
       textData[i].type = getCharacterType(c);
       textData[i].char = c;
       textData[i].index = idx;
@@ -231,6 +237,9 @@ class Paragraph {
 
       _resolveWeakTypes(
           textData, start, limit, sor, eor, n.hasPersian, n.hasNonspacingMark);
+      if (hasBracket) {
+        _resolveBracketPairs(textData, start, limit, sor, level);
+      }
       _resolveNeutralTypes(textData, start, limit, sor, eor, level);
       _resolveImplicitTypes(textData, start, limit, level);
 
@@ -705,6 +714,120 @@ void _resolveWeakTypes(
       tW7 = CharacterType.ltr;
     } else if (textData[i].type == CharacterType.en) {
       textData[i].type = tW7;
+    }
+  }
+}
+
+// N0 (Unicode UAX #9): resolve matched ASCII bracket pairs together,
+// before the ordinary neutral-type rules N1 and N2. Matching is bounded at
+// 63 opening brackets, per BD16. This implementation handles the common
+// bracket families used in Hebrew texts; full UBA isolate processing and
+// the complete BidiBrackets.txt table require separate conformance work.
+class _BracketPair {
+  const _BracketPair(this.opening, this.closing);
+
+  final int opening;
+  final int closing;
+}
+
+int _asciiClosingBracket(int character) {
+  switch (character) {
+    case 0x28:
+      return 0x29;
+    case 0x5B:
+      return 0x5D;
+    case 0x7B:
+      return 0x7D;
+    default:
+      return -1;
+  }
+}
+
+void _resolveBracketPairs(
+  List<_CharData> textData,
+  int start,
+  int limit,
+  CharacterType sor,
+  int level,
+) {
+  final openings = <int>[];
+  final expectedClosings = <int>[];
+  final pairs = <_BracketPair>[];
+
+  for (var i = start; i < limit; ++i) {
+    if (textData[i].type != CharacterType.otherNeutrals) {
+      continue;
+    }
+    final character = textData[i].char;
+    final closing = _asciiClosingBracket(character);
+    if (closing >= 0) {
+      if (openings.length == 63) {
+        return; // BD16: ignore pairs if the nesting limit is exceeded.
+      }
+      openings.add(i);
+      expectedClosings.add(closing);
+    } else if (character == 0x29 ||
+        character == 0x5D ||
+        character == 0x7D) {
+      for (var j = openings.length - 1; j >= 0; --j) {
+        if (expectedClosings[j] == character) {
+          pairs.add(_BracketPair(openings[j], i));
+          openings.length = j;
+          expectedClosings.length = j;
+          break;
+        }
+      }
+    }
+  }
+
+  if (pairs.isEmpty) {
+    return;
+  }
+  pairs.sort((a, b) => a.opening.compareTo(b.opening));
+
+  final embedding = _typeForLevel(level);
+  final opposite = embedding == CharacterType.ltr
+      ? CharacterType.rtl
+      : CharacterType.ltr;
+
+  for (final pair in pairs) {
+    var hasEmbedding = false;
+    var hasOpposite = false;
+    for (var i = pair.opening + 1; i < pair.closing; ++i) {
+      var type = textData[i].type;
+      if (type == CharacterType.en || type == CharacterType.an) {
+        type = CharacterType.rtl;
+      }
+      if (type == embedding) {
+        hasEmbedding = true;
+        break;
+      }
+      if (type == opposite) {
+        hasOpposite = true;
+      }
+    }
+
+    CharacterType? resolved;
+    if (hasEmbedding) {
+      resolved = embedding;
+    } else if (hasOpposite) {
+      var preceding = sor;
+      for (var i = pair.opening - 1; i >= start; --i) {
+        var type = textData[i].type;
+        if (type == CharacterType.en || type == CharacterType.an) {
+          type = CharacterType.rtl;
+        }
+        if (type == CharacterType.ltr || type == CharacterType.rtl) {
+          preceding = type;
+          break;
+        }
+      }
+      resolved = preceding == opposite ? opposite : embedding;
+    }
+
+    if (resolved != null) {
+      textData[pair.opening].type = resolved;
+      textData[pair.closing].type = resolved;
     }
   }
 }
