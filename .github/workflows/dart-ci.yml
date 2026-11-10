@@ -1,0 +1,21 @@
+name: Combined bidi patch QA
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Static analysis
+        run: dart analyze lib test
+      - name: Run all independent and package tests
+        run: dart test --reporter expanded
+      - name: Benchmark smoke
+        run: dart run benchmark/bidi_benchmark.dart
