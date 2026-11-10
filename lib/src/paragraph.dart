@@ -284,11 +284,35 @@ class Normalization {
     this.text,
     this.lengths,
     this.hasPersian,
-    this.hasNonspacingMark,
-  );
+    this.hasNonspacingMark, [
+    this._plainHebrewAscii = false,
+  ]);
 
   /// Calculates the internal decomposition of the input text.
   factory Normalization.decompose(List<int> characters) {
+    // Plain (unpointed) Hebrew and ASCII have neither decomposition
+    // mappings nor combining marks. Copy them directly and skip the
+    // composition pass, whose temporary strings dominate this hot path.
+    // Hebrew presentation forms, niqqud, other scripts, and supplementary
+    // scalars still go through the complete legacy normalization pipeline.
+    var plainHebrewAscii = true;
+    for (final character in characters) {
+      if (character > 0x7F &&
+          (character < 0x05D0 || character > 0x05EA)) {
+        plainHebrewAscii = false;
+        break;
+      }
+    }
+    if (plainHebrewAscii) {
+      return Normalization._(
+        List<int>.of(characters),
+        List<int>.filled(characters.length, 1),
+        false,
+        false,
+        true,
+      );
+    }
+
     final List<int> text = [];
     final List<int> lengths = [];
 
@@ -337,7 +361,7 @@ class Normalization {
 
   /// Compose.
   void _compose() {
-    if (text.isEmpty) {
+    if (_plainHebrewAscii || text.isEmpty) {
       return;
     }
 
@@ -556,6 +580,9 @@ class Normalization {
 
   /// Has Nonspacing Mark.
   final bool hasNonspacingMark;
+
+  /// True when the input is known to be normalization-inert.
+  final bool _plainHebrewAscii;
 }
 
 int _getPairwiseComposition(int first, int second) {
