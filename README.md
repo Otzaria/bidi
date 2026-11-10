@@ -8,7 +8,7 @@ This is the [Otzaria-maintained fork](https://github.com/Otzaria/bidi) of
 Otzaria's text/PDF printing pipeline to order mixed Hebrew, Latin, numerals,
 punctuation and combining marks when the output renderer needs visual order.
 
-The underlying resolver began with [Unicode UAX #9 revision 17](https://www.unicode.org/reports/tr9/).
+The underlying resolver began with [Unicode UAX #9 revision 17](https://www.unicode.org/reports/tr9/tr9-17.html).
 Recent improvements handle supplementary Unicode scalars, UTF-16 source mapping,
 Hebrew combining-mark order and paired brackets. **It is not yet a complete
 implementation of modern UAX #9**: directional isolates (LRI/RLI/FSI/PDI) and
@@ -26,12 +26,18 @@ need visual-order glyph/text sequences.
 
 ## Getting Started
 
-In your `pubspec.yaml` file add:
+To use the fork improvements documented here, add this Git dependency to
+your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  bidi: ^2.0.13
+  bidi:
+    git:
+      url: https://github.com/Otzaria/bidi.git
+      ref: 4531defe12ae543fc0034e3690e828653c76f1d6
 ```
+
+The published `bidi: ^2.0.13` dependency does not include these fork improvements.
 
 Then, in your code import and use the package:
 
@@ -67,5 +73,6 @@ code units in the source, but one Unicode code point in the visual output.
 The published `bidi` package on [pub.dev](https://pub.dev/packages/bidi)
 is currently associated with the original `pwa.ir` publisher. Merging
 changes into this fork does **not** publish a new package version. A release
-must be arranged by an authorized package uploader/publisher; the release
-workflow is designed to trigger only from a maintainer-created version tag.
+must be arranged by an authorized package uploader/publisher. The release
+workflow triggers only on version tags such as `v2.0.14` and requires the
+package owner to configure trusted publishing for `Otzaria/bidi` on pub.dev.
