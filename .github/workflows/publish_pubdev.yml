@@ -1,17 +1,21 @@
-name: Publish to Pub.dev
+name: Publish to pub.dev
 
+# Publishing is deliberately release-tag-only. The former workflow tried to
+# upload on every main push, with an unset long-lived credential secret.
+#
+# One-time pub.dev admin setup (requires package owner/uploader access):
+#   Repository: Otzaria/bidi
+#   Tag pattern: v{{version}}
+# Update pubspec.yaml's version and push a matching release tag when ready.
+# Official guide: https://dart.dev/tools/pub/automated-publishing
 on:
   push:
-    branches: [main]
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  publishing:
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Checkout"
-        uses: actions/checkout@v2
-
-      - name: "bidi"
-        uses: k-paxian/dart-package-publisher@master
-        with:
-          credentialJson: ${{ secrets.CREDENTIAL_JSON }}
+  publish:
+    permissions:
+      contents: read
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
