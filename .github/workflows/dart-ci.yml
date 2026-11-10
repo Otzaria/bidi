@@ -3,7 +3,7 @@ name: Dart checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'perf/plain-hebrew-normalization-fast-path-20261110']
 
 jobs:
   dart:
@@ -19,3 +19,14 @@ jobs:
         run: dart analyze lib test
       - name: Regression tests
         run: dart test --reporter expanded
+      - name: Optimized benchmark
+        run: dart run benchmark/plain_hebrew_benchmark.dart
+      - name: Main branch baseline on same runner
+        run: |
+          git fetch origin main --depth=1
+          git worktree add --detach /tmp/bidi-baseline FETCH_HEAD
+          mkdir -p /tmp/bidi-baseline/benchmark
+          cp benchmark/plain_hebrew_benchmark.dart /tmp/bidi-baseline/benchmark/
+          cd /tmp/bidi-baseline
+          flutter pub get
+          dart run benchmark/plain_hebrew_benchmark.dart
