@@ -2,7 +2,7 @@ name: Combined bidi patch QA
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'test/**', 'qa/**']
 jobs:
   dart:
     runs-on: ubuntu-latest
