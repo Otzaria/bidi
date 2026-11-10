@@ -27,6 +27,7 @@ class Paragraph {
   final Normalization n;
 
   final List<int> _indices = [];
+  final List<int> _sourceLengths = [];
 
   /// Original text.
   List<int> get text {
@@ -54,6 +55,10 @@ class Paragraph {
     return _indices;
   }
 
+  /// UTF-16 source span of each visual character, in the same order as
+  /// [indices], not including the optional paragraph separator.
+  List<int> get sourceLengths => _sourceLengths;
+
   /// The paragraph separatpr.
   int get separator => _separator;
 
@@ -79,10 +84,12 @@ class Paragraph {
       }
       _bidiText[write] = character;
       _indices[write] = _indices[read];
+      _sourceLengths[write] = _sourceLengths[read];
       ++write;
     }
     _bidiText.length = write;
     _indices.length = write;
+    _sourceLengths.length = write;
   }
 
   // 3.3.2 Explicit Levels and Directions
@@ -113,6 +120,7 @@ class Paragraph {
       textData[i].type = getCharacterType(c);
       textData[i].char = c;
       textData[i].index = idx;
+      textData[i].sourceLength = lengths[i];
       idx += lengths[i];
 
       // X2. With each RLE, compute the least greater odd embedding level.
@@ -217,9 +225,11 @@ class Paragraph {
 
     _bidiText.clear();
     _indices.clear();
+    _sourceLengths.clear();
     for (final cd in textData) {
       _bidiText.add(cd.char);
       _indices.add(cd.index);
+      _sourceLengths.add(cd.sourceLength);
     }
   }
 }
@@ -229,6 +239,7 @@ class _CharData {
   late int embeddingLevel; // 0-62 => 6
   late CharacterType type; // 0-18 => 5
   late int index;
+  late int sourceLength;
 }
 
 /// Return the strong type (L or R) corresponding to the embedding level.
