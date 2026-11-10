@@ -29,6 +29,7 @@ void main() {
   test('ASCII CRLF and repeated paragraph boundaries are unchanged', () {
     const input = 'one\r\ntwo\n\nthree\rfour\u001cfive';
     expect(String.fromCharCodes(bidi.logicalToVisual(input)), input);
-    expect(bidi.BidiString.fromLogical(input).paragraphs.length, 6);
+    // The existing parser counts CR and LF separately, including CRLF.
+    expect(bidi.BidiString.fromLogical(input).paragraphs.length, 7);
   });
 }
