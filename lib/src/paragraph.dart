@@ -270,9 +270,9 @@ class Normalization {
     this.text,
     this.lengths,
     this.hasPersian,
-    this.hasNonspacingMark, {
+    this.hasNonspacingMark, [
     this._plainHebrewAscii = false,
-  });
+  ]);
 
   /// Calculates the internal decomposition of the input text.
   factory Normalization.decompose(List<int> characters) {
@@ -295,7 +295,7 @@ class Normalization {
         List<int>.filled(characters.length, 1),
         false,
         false,
-        _plainHebrewAscii: true,
+        true,
       );
     }
 
