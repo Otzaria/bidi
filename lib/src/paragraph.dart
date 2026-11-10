@@ -19,6 +19,24 @@ class Paragraph {
     _removeBidiMarkers();
   }
 
+  /// ASCII has no RTL characters or directional controls; under the default
+  /// paragraph base (LTR), its code-unit order is already its visual order.
+  /// Avoid normalization, character objects, shaping, and level resolution.
+  Paragraph._ascii(List<int> text, this._separator)
+      : n = Normalization._(
+          List<int>.of(text),
+          List<int>.filled(text.length, 1),
+          false,
+          false,
+        ) {
+    _originalText.addAll(text);
+    _bidiText.addAll(text);
+    for (var index = 0; index < text.length; ++index) {
+      _indices.add(index);
+      _sourceLengths.add(1);
+    }
+  }
+
   final int _separator;
   final List<int> _originalText = [];
   final List<int> _bidiText = [];
@@ -27,6 +45,7 @@ class Paragraph {
   final Normalization n;
 
   final List<int> _indices = [];
+  final List<int> _sourceLengths = [];
 
   /// Original text.
   List<int> get text {
@@ -54,6 +73,10 @@ class Paragraph {
     return _indices;
   }
 
+  /// Original UTF-16 source span corresponding to each visual code point.
+  /// This array is aligned to [indices] and excludes paragraph separators.
+  List<int> get sourceLengths => _sourceLengths;
+
   /// The paragraph separatpr.
   int get separator => _separator;
 
@@ -79,10 +102,12 @@ class Paragraph {
       }
       _bidiText[write] = character;
       _indices[write] = _indices[read];
+      _sourceLengths[write] = _sourceLengths[read];
       ++write;
     }
     _bidiText.length = write;
     _indices.length = write;
+    _sourceLengths.length = write;
   }
 
   // 3.3.2 Explicit Levels and Directions
@@ -113,6 +138,7 @@ class Paragraph {
       textData[i].type = getCharacterType(c);
       textData[i].char = c;
       textData[i].index = idx;
+      textData[i].sourceLength = lengths[i];
       idx += lengths[i];
 
       // X2. With each RLE, compute the least greater odd embedding level.
@@ -217,9 +243,11 @@ class Paragraph {
 
     _bidiText.clear();
     _indices.clear();
+    _sourceLengths.clear();
     for (final cd in textData) {
       _bidiText.add(cd.char);
       _indices.add(cd.index);
+      _sourceLengths.add(cd.sourceLength);
     }
   }
 }
@@ -229,6 +257,7 @@ class _CharData {
   late int embeddingLevel; // 0-62 => 6
   late CharacterType type; // 0-18 => 5
   late int index;
+  late int sourceLength;
 }
 
 /// Return the strong type (L or R) corresponding to the embedding level.
