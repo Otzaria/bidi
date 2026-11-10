@@ -16,8 +16,14 @@ class BidiString {
       if (char > 0x7F) {
         asciiOnly = false;
       }
-      final type = getCharacterType(char);
-      if (type == CharacterType.separator) {
+      // ASCII paragraph separators are exactly LF, CR and U+001C..U+001E.
+      // The scanner only needs the separator classification, not the full
+      // Unicode bidi type. Avoid a map lookup for each ASCII character in
+      // large mixed Hebrew/English text and ASCII-only paragraphs.
+      final isSeparator = char < 0x80
+          ? char == 0x0A || char == 0x0D || (char >= 0x1C && char <= 0x1E)
+          : getCharacterType(char) == CharacterType.separator;
+      if (isSeparator) {
         final paragraph =
             asciiOnly ? Paragraph._ascii(next, char) : Paragraph._(next, char);
         paragraphs.add(paragraph);
