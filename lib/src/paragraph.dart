@@ -19,6 +19,22 @@ class Paragraph {
     _removeBidiMarkers();
   }
 
+  /// ASCII is already in visual order under the default LTR paragraph base.
+  Paragraph._ascii(List<int> text, this._separator)
+      : n = Normalization._(
+          List<int>.of(text),
+          List<int>.filled(text.length, 1),
+          false,
+          false,
+        ) {
+    _originalText.addAll(text);
+    _bidiText.addAll(text);
+    for (var index = 0; index < text.length; ++index) {
+      _indices.add(index);
+      _sourceLengths.add(1);
+    }
+  }
+
   final int _separator;
   final List<int> _originalText = [];
   final List<int> _bidiText = [];
@@ -68,31 +84,28 @@ class Paragraph {
 
   /// Removes Bidi markers from text.
   void _removeBidiMarkers() {
-    final controlChars = [
-      0x200F,
-      0x202B,
-      0x202E,
-      0x200E,
-      0x202A,
-      0x202D,
-      0x202C,
-    ];
-
-    final sb = _bidiText.toList();
-
-    int i = 0;
-    while (i < sb.length) {
-      if (controlChars.contains(sb[i])) {
-        sb.removeAt(i);
-        _indices.removeAt(i);
-        _sourceLengths.removeAt(i);
-      } else {
-        ++i;
+    // Compact both aligned arrays in place. Repeated removeAt() calls made
+    // marker-heavy paragraphs quadratic and allocated a duplicate text list.
+    var write = 0;
+    for (var read = 0; read < _bidiText.length; ++read) {
+      final character = _bidiText[read];
+      if (character == 0x200E ||
+          character == 0x200F ||
+          character == 0x202A ||
+          character == 0x202B ||
+          character == 0x202C ||
+          character == 0x202D ||
+          character == 0x202E) {
+        continue;
       }
+      _bidiText[write] = character;
+      _indices[write] = _indices[read];
+      _sourceLengths[write] = _sourceLengths[read];
+      ++write;
     }
-
-    _bidiText.clear();
-    _bidiText.addAll(sb);
+    _bidiText.length = write;
+    _indices.length = write;
+    _sourceLengths.length = write;
   }
 
   // 3.3.2 Explicit Levels and Directions
@@ -100,14 +113,20 @@ class Paragraph {
     // This method is implemented in such a way it handles the string in logical order,
     // rather than visual order, so it is easier to handle complex layouts. That is why
     // it is placed BEFORE ReorderString rather than AFTER it, as its number suggests.
+    final sourceIndices = <int>[];
+    var sourceOffset = 0;
+    for (final length in n.lengths) {
+      sourceIndices.add(sourceOffset);
+      sourceOffset += length;
+    }
+    final sourceLengths = n.lengths.toList();
     if (n.hasPersian) {
-      final shaped = n._performShaping();
+      final shaped = n._performShaping(sourceIndices, sourceLengths);
       n.text.clear();
       n.text.addAll(shaped);
     }
     int embeddingLevel = el;
     final text = n.text;
-    final lengths = n.lengths;
 
     final textData =
         List<_CharData>.generate(n.text.length, (index) => _CharData());
@@ -116,15 +135,14 @@ class Paragraph {
     var dos = DirectionOverride.neutral;
     final dosStack = _Stack<DirectionOverride>();
     _Stack<int> elStack = _Stack<int>();
-    int idx = 0;
+
     for (int i = 0; i < text.length; ++i) {
       bool x9Char = false;
       final c = text[i];
       textData[i].type = getCharacterType(c);
       textData[i].char = c;
-      textData[i].index = idx;
-      textData[i].sourceLength = lengths[i];
-      idx += lengths[i];
+      textData[i].index = sourceIndices[i];
+      textData[i].sourceLength = sourceLengths[i];
 
       // X2. With each RLE, compute the least greater odd embedding level.
       // X4. With each RLO, compute the least greater odd embedding level.
@@ -223,25 +241,15 @@ class Paragraph {
       start = limit;
     }
 
-    _reorderString(textData, el);
+    _reorderString(textData, el, n.hasNonspacingMark);
     _fixMirroredCharacters(textData);
 
-    List<int> indexes = [];
-
-    final List<int> sb = [];
-    for (final cd in textData) {
-      sb.add(cd.char);
-      indexes.add(cd.index);
-    }
-
     _bidiText.clear();
-    _bidiText.addAll(sb);
-
     _indices.clear();
-    _indices.addAll(indexes);
-
     _sourceLengths.clear();
     for (final cd in textData) {
+      _bidiText.add(cd.char);
+      _indices.add(cd.index);
       _sourceLengths.add(cd.sourceLength);
     }
   }
@@ -270,25 +278,49 @@ class Normalization {
     this.text,
     this.lengths,
     this.hasPersian,
-    this.hasNonspacingMark,
-  );
+    this.hasNonspacingMark, [
+    this._plainHebrewAscii = false,
+  ]);
 
   /// Calculates the internal decomposition of the input text.
   factory Normalization.decompose(List<int> characters) {
+    // These scalars have no decomposition or combining marks, so neither
+    // normalization pass can change them or their source spans.
+    var plainHebrewAscii = true;
+    for (final character in characters) {
+      if (character > 0x7F && (character < 0x05D0 || character > 0x05EA)) {
+        plainHebrewAscii = false;
+        break;
+      }
+    }
+    if (plainHebrewAscii) {
+      return Normalization._(
+        List<int>.of(characters),
+        List<int>.filled(characters.length, 1),
+        false,
+        false,
+        true,
+      );
+    }
+
     final List<int> text = [];
     final List<int> lengths = [];
 
     var hasPersian = false;
     var hasNSMs = false;
 
+    // Reuse the temporary decomposition buffer for each input character.
+    final buffer = <int>[];
     for (int i = 0; i < characters.length; ++i) {
       final ct = getCharacterType(characters[i]);
       hasPersian |= ((ct == CharacterType.al) || (ct == CharacterType.an));
       hasNSMs |= (ct == CharacterType.nonspacingMark);
 
-      final buffer = <int>[];
+      buffer.clear();
       _getRecursiveDecomposition(false, characters[i], buffer);
-      lengths.add(1 - buffer.length);
+      // Supplementary scalars occupy two UTF-16 code units. Preserve
+      // original String offsets for visual-to-logical index consumers.
+      lengths.add((characters[i] > 0xFFFF ? 2 : 1) - buffer.length);
       // add all of the characters in the decomposition.
       // (may be just the original character, if there was
       // no decomposition mapping)
@@ -296,6 +328,12 @@ class Normalization {
       for (int j = 0; j < buffer.length; ++j) {
         final character = buffer[j];
         final chClass = _getCanonicalClass(character);
+        // Some precomposed characters decompose into combining marks even
+        // when their original bidi class is a strong letter.
+        if (!hasNSMs &&
+            getCharacterType(character) == CharacterType.nonspacingMark) {
+          hasNSMs = true;
+        }
         int k = text.length; // insertion point
         if (chClass != _CanonicalClass.notReordered) {
           // bubble-sort combining marks as necessary
@@ -315,7 +353,7 @@ class Normalization {
 
   /// Compose.
   void _compose() {
-    if (text.isEmpty) {
+    if (_plainHebrewAscii || text.isEmpty) {
       return;
     }
 
@@ -391,7 +429,7 @@ class Normalization {
   /// 3.5 Shaping
   /// Implements rules R1-R7 and rules L1-L3 of section 8.2 (Persian) of the Unicode standard.
   // TODO - this code is very special-cased.
-  List<int> _performShaping() {
+  List<int> _performShaping(List<int> sourceIndices, List<int> sourceLengths) {
     var lastJt = ShapeJoiningType.nonJoining;
     var lastForm = LetterForm.isolated;
     int lastPos = 0;
@@ -441,6 +479,18 @@ class Normalization {
 
     final sb = <int>[];
 
+    // Source spans may overlap when a ligature spans transparent marks.
+    void finishLamAlef() {
+      final alefPos = sb.length;
+      sourceLengths[insertPos] = sourceIndices[alefPos] +
+          sourceLengths[alefPos] -
+          sourceIndices[insertPos];
+      sourceIndices.removeAt(alefPos);
+      sourceLengths.removeAt(alefPos);
+      lengths[insertPos] += lengths.removeAt(alefPos);
+      lastChar = _BidiChars.notAChar;
+    }
+
     for (int i = 0; i < text.length; ++i) {
       var ch = text[i];
       //string chStr = (ch).toString("X4");
@@ -464,46 +514,44 @@ class Normalization {
           switch (ch) {
             case _BidiChars.ARABIC_ALEF:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_FINAL;
-              lengths.removeAt(insertPos);
+              finishLamAlef();
               continue;
 
             case _BidiChars.ARABIC_ALEF_MADDA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_MADDA_ABOVE_FINAL;
-              lengths.removeAt(insertPos);
-              lengths[insertPos] = lengths[insertPos] + 1;
+              finishLamAlef();
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_ABOVE_FINAL;
-              lengths.removeAt(insertPos);
+              finishLamAlef();
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_BELOW:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_BELOW_FINAL;
-              lengths.removeAt(insertPos);
+              finishLamAlef();
               continue;
           }
         } else if (letterForms[lastPos] == LetterForm.initial) {
           switch (ch) {
             case _BidiChars.ARABIC_ALEF:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_ISOLATED;
-              lengths.removeAt(insertPos);
+              finishLamAlef();
               continue;
 
             case _BidiChars.ARABIC_ALEF_MADDA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_MADDA_ABOVE_ISOLATED;
-              lengths.removeAt(insertPos);
-              lengths[insertPos] = lengths[insertPos] + 1;
+              finishLamAlef();
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_ABOVE_ISOLATED;
-              lengths.removeAt(insertPos);
+              finishLamAlef();
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_BELOW:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_BELOW_ISOLATED;
-              lengths.removeAt(insertPos);
+              finishLamAlef();
               continue;
           }
         }
@@ -526,10 +574,19 @@ class Normalization {
 
   /// Has Nonspacing Mark.
   final bool hasNonspacingMark;
+
+  /// True only when the input has already been proven normalization-inert.
+  final bool _plainHebrewAscii;
 }
 
 int _getPairwiseComposition(int first, int second) {
   if (first < 0 || first > 0xFFFF || second < 0 || second > 0xFFFF) {
+    return _BidiChars.notAChar;
+  }
+  // No canonical Unicode composition ends in an ASCII character.
+  // Avoid allocating a two-character String for every space, ASCII digit,
+  // punctuation mark, and Latin letter in a mixed Hebrew/English paragraph.
+  if (second < 0x80) {
     return _BidiChars.notAChar;
   }
 
@@ -691,6 +748,8 @@ void _resolveNeutralTypes(
   CharacterType eor,
   int level,
 ) {
+  _resolveBracketPairs(textData, start, limit, sor, level);
+
   // N1. A sequence of neutrals takes the direction of the surrounding strong text if the text on both sides has the same direction.
   //     European and Persian numbers act as if they were R in terms of their influence on neutrals.
   //     Start-of-level-run (sor) and end-of-level-run (eor) are used at level run boundaries.
@@ -795,7 +854,11 @@ void _resolveImplicitTypes(
 }
 
 /// 3.4 Reordering Resolved Levels
-void _reorderString(List<_CharData> textData, int embeddingLevel) {
+void _reorderString(
+  List<_CharData> textData,
+  int embeddingLevel,
+  bool hasNonspacingMark,
+) {
   //L1. On each line, reset the embedding level of the following characters to the paragraph embedding level:
   //    1. Segment separators,
   //    2. Paragraph separators,
@@ -856,9 +919,39 @@ void _reorderString(List<_CharData> textData, int embeddingLevel) {
     }
   }
 
-  // TODO - L3. Combining marks applied to a right-to-left base character will at this point precede their base
-  // character. If the rendering engine expects them to follow the base characters in the final display process,
-  // then the ordering of the marks and the base character must be reversed.
+  // L3 restores base+mark clusters reversed inside odd-level runs.
+  if (!hasNonspacingMark) {
+    return;
+  }
+
+  var i = 0;
+  while (i < textData.length) {
+    final level = textData[i].embeddingLevel;
+    if ((level & 1) == 0 ||
+        getCharacterType(textData[i].char) != CharacterType.nonspacingMark) {
+      ++i;
+      continue;
+    }
+
+    final start = i;
+    do {
+      ++i;
+    } while (i < textData.length &&
+        textData[i].embeddingLevel == level &&
+        getCharacterType(textData[i].char) == CharacterType.nonspacingMark);
+
+    // A free-standing mark or a level boundary has no base to restore.
+    if (i >= textData.length || textData[i].embeddingLevel != level) {
+      continue;
+    }
+
+    for (var left = start, right = i; left < right; ++left, --right) {
+      final temp = textData[left];
+      textData[left] = textData[right];
+      textData[right] = temp;
+    }
+    ++i;
+  }
 }
 
 /// L4. A character is depicted by a mirrored glyph if and only if (a) the resolved directionality of that character is R, and (b) the Bidi_Mirrored property value of that character is true.
