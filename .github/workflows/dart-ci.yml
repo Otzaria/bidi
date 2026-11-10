@@ -27,3 +27,14 @@ jobs:
       - name: Plain Hebrew benchmark smoke run
         run: dart run benchmark/plain_hebrew_benchmark.dart
 
+      - name: Optimized neutral-run benchmark
+        run: dart run benchmark/neutral_runs_benchmark.dart
+      - name: Baseline benchmark against main on same runner
+        run: |
+          git fetch origin main --depth=1
+          git worktree add --detach /tmp/bidi-neutral-baseline FETCH_HEAD
+          mkdir -p /tmp/bidi-neutral-baseline/benchmark
+          cp benchmark/neutral_runs_benchmark.dart /tmp/bidi-neutral-baseline/benchmark/
+          cd /tmp/bidi-neutral-baseline
+          flutter pub get
+          dart run benchmark/neutral_runs_benchmark.dart
