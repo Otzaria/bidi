@@ -25,4 +25,5 @@ jobs:
         run: dart run benchmark/ascii_fast_path_benchmark.dart
 
       - name: Plain Hebrew benchmark smoke run
-        run: dart run benchmark/plain_hebrew_fast_path_benchmark.dart
+        run: dart run benchmark/plain_hebrew_benchmark.dart
+
