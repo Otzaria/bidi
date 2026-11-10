@@ -1,9 +1,9 @@
-name: Dart checks
+﻿name: Dart checks
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'test/**', 'qa/**']
 
 jobs:
   dart:
@@ -23,3 +23,4 @@ jobs:
         run: dart run benchmark/bidi_benchmark.dart
       - name: ASCII benchmark smoke run
         run: dart run benchmark/ascii_fast_path_benchmark.dart
+
