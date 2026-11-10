@@ -27,3 +27,14 @@ jobs:
       - name: Plain Hebrew benchmark smoke run
         run: dart run benchmark/plain_hebrew_benchmark.dart
 
+      - name: Optimized common-class benchmark
+        run: dart run benchmark/fast_character_classes_benchmark.dart
+      - name: Baseline on same runner
+        run: |
+          git fetch origin main --depth=1
+          git worktree add --detach /tmp/bidi-class-baseline FETCH_HEAD
+          mkdir -p /tmp/bidi-class-baseline/benchmark
+          cp benchmark/fast_character_classes_benchmark.dart /tmp/bidi-class-baseline/benchmark/
+          cd /tmp/bidi-class-baseline
+          flutter pub get
+          dart run benchmark/fast_character_classes_benchmark.dart
