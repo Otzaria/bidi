@@ -11,12 +11,18 @@ class BidiString {
     // Iterate Unicode scalar values, never individual UTF-16 surrogate
     // halves. Reordering the halves separately corrupts supplementary text.
     var next = <int>[];
+    var asciiOnly = true;
     for (final char in text.runes) {
+      if (char > 0x7F) {
+        asciiOnly = false;
+      }
       final type = getCharacterType(char);
       if (type == CharacterType.separator) {
-        final paragraph = Paragraph._(next, char);
+        final paragraph =
+            asciiOnly ? Paragraph._ascii(next, char) : Paragraph._(next, char);
         paragraphs.add(paragraph);
         next = [];
+        asciiOnly = true;
       } else {
         next.add(char);
       }
@@ -24,7 +30,9 @@ class BidiString {
 
     if (next.isNotEmpty) // string ended without a paragraph separator
     {
-      paragraphs.add(Paragraph._(next, _BidiChars.notAChar));
+      paragraphs.add(asciiOnly
+          ? Paragraph._ascii(next, _BidiChars.notAChar)
+          : Paragraph._(next, _BidiChars.notAChar));
     }
 
     return BidiString._(paragraphs);
