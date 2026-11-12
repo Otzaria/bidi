@@ -32,8 +32,7 @@ void main() {
       final visual = String.fromCharCodes(paragraph.bidiText);
       expect(visual.runes.length, 3, reason: text);
       expect(paragraph.indices[visual.indexOf('X')], 3, reason: text);
-      expect(paragraph.n.lengths.reduce((a, b) => a + b), 4,
-          reason: text);
+      expect(paragraph.n.lengths.reduce((a, b) => a + b), 4, reason: text);
     }
   });
 
@@ -50,5 +49,26 @@ void main() {
     final paragraph = bidi.BidiString.fromLogical(input).paragraphs.single;
     final visual = String.fromCharCodes(paragraph.bidiText);
     expect(paragraph.indices[visual.indexOf('X')], input.length - 1);
+  });
+
+  test('dense ligatures compact aligned mappings without losing later offsets',
+      () {
+    const repeated = 'لَابلاX ';
+    final input = List.filled(2000, repeated).join();
+    final paragraph = bidi.BidiString.fromLogical(input).paragraphs.single;
+    final visual = paragraph.bidiText;
+    expect(visual, hasLength(input.length - 4000));
+    expect(paragraph.indices, hasLength(visual.length));
+    expect(paragraph.sourceLengths, hasLength(visual.length));
+    expect(paragraph.n.lengths.reduce((a, b) => a + b), input.length);
+    for (var i = 0; i < visual.length; i++) {
+      if (visual[i] == 0x58) {
+        expect(input.codeUnitAt(paragraph.indices[i]), 0x58);
+        expect(paragraph.sourceLengths[i], 1);
+      } else if (visual[i] == 0x064e) {
+        expect(input.codeUnitAt(paragraph.indices[i]), 0x064e);
+        expect(paragraph.sourceLengths[i], 1);
+      }
+    }
   });
 }
