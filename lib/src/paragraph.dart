@@ -487,14 +487,11 @@ class Normalization {
     final sb = <int>[];
 
     // Source spans may overlap when a ligature spans transparent marks.
-    void finishLamAlef() {
-      final alefPos = sb.length;
+    void finishLamAlef(int alefPos) {
       sourceLengths[insertPos] = sourceIndices[alefPos] +
           sourceLengths[alefPos] -
           sourceIndices[insertPos];
-      sourceIndices.removeAt(alefPos);
-      sourceLengths.removeAt(alefPos);
-      lengths[insertPos] += lengths.removeAt(alefPos);
+      lengths[insertPos] += lengths[alefPos];
       lastChar = _BidiChars.notAChar;
     }
 
@@ -521,51 +518,58 @@ class Normalization {
           switch (ch) {
             case _BidiChars.ARABIC_ALEF:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_FINAL;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
 
             case _BidiChars.ARABIC_ALEF_MADDA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_MADDA_ABOVE_FINAL;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_ABOVE_FINAL;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_BELOW:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_BELOW_FINAL;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
           }
         } else if (letterForms[lastPos] == LetterForm.initial) {
           switch (ch) {
             case _BidiChars.ARABIC_ALEF:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_ISOLATED;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
 
             case _BidiChars.ARABIC_ALEF_MADDA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_MADDA_ABOVE_ISOLATED;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_ABOVE:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_ABOVE_ISOLATED;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
 
             case _BidiChars.ARABIC_ALEF_HAMZA_BELOW:
               sb[insertPos] = _BidiChars.ARABIC_LAM_ALEF_HAMZA_BELOW_ISOLATED;
-              finishLamAlef();
+              finishLamAlef(i);
               continue;
           }
         }
       }
 
+      final output = sb.length;
+      sourceIndices[output] = sourceIndices[i];
+      sourceLengths[output] = sourceLengths[i];
+      lengths[output] = lengths[i];
       sb.add(_getCharacterByLetterForm(ch, letterForms[i]));
     }
+    sourceIndices.length = sb.length;
+    sourceLengths.length = sb.length;
+    lengths.length = sb.length;
 
     return sb;
   }
