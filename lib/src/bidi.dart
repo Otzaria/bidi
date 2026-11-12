@@ -1,12 +1,24 @@
 part of '../bidi.dart';
 
+/// Order expected by the renderer for marks attached to right-to-left bases.
+enum RtlCombiningMarkOrder {
+  /// Marks precede their base, for direct glyph rendering with RTL overhang.
+  beforeBase,
+
+  /// Marks follow their base, for renderers that consume base-plus-mark clusters.
+  afterBase,
+}
+
 /// Bidi String.
 class BidiString {
   BidiString._(this.paragraphs);
 
-  /// Implementation of the BIDI algorithm, as described in http://www.unicode.org/reports/tr9/tr9-17.html
-  /// [text] is the original logical-ordered string. Returns the visual representation of the string.
-  factory BidiString.fromLogical(String text) {
+  /// Converts logical [text] to visual order.
+  /// [combiningMarkOrder] must match the renderer's mark-placement convention (UBA L3).
+  factory BidiString.fromLogical(
+    String text, {
+    RtlCombiningMarkOrder combiningMarkOrder = RtlCombiningMarkOrder.beforeBase,
+  }) {
     final paragraphs = <Paragraph>[];
     // Iterate Unicode scalar values, never individual UTF-16 surrogate
     // halves. Reordering the halves separately corrupts supplementary text.
@@ -24,8 +36,9 @@ class BidiString {
           ? char == 0x0A || char == 0x0D || (char >= 0x1C && char <= 0x1E)
           : getCharacterType(char) == CharacterType.separator;
       if (isSeparator) {
-        final paragraph =
-            asciiOnly ? Paragraph._ascii(next, char) : Paragraph._(next, char);
+        final paragraph = asciiOnly
+            ? Paragraph._ascii(next, char)
+            : Paragraph._(next, char, combiningMarkOrder);
         paragraphs.add(paragraph);
         next = [];
         asciiOnly = true;
@@ -38,7 +51,7 @@ class BidiString {
     {
       paragraphs.add(asciiOnly
           ? Paragraph._ascii(next, _BidiChars.notAChar)
-          : Paragraph._(next, _BidiChars.notAChar));
+          : Paragraph._(next, _BidiChars.notAChar, combiningMarkOrder));
     }
 
     return BidiString._(paragraphs);
@@ -50,8 +63,14 @@ class BidiString {
 
 /// Implementation of the BIDI algorithm, as described in http://www.unicode.org/reports/tr9/tr9-17.html
 /// [logicalString] is the original logical-ordered string. Returns the visual representation of the string.
-List<int> logicalToVisual(String logicalString) {
-  final paragraphs = BidiString.fromLogical(logicalString).paragraphs;
+List<int> logicalToVisual(
+  String logicalString, {
+  RtlCombiningMarkOrder combiningMarkOrder = RtlCombiningMarkOrder.beforeBase,
+}) {
+  final paragraphs = BidiString.fromLogical(
+    logicalString,
+    combiningMarkOrder: combiningMarkOrder,
+  ).paragraphs;
   final sb = <int>[];
   for (final p in paragraphs) {
     sb.addAll(p.bidiText);
@@ -72,8 +91,9 @@ List<int> logicalToVisual(String logicalString) {
 String logicalToVisual2(
   String logicalString,
   List<int> indexes,
-  List<int> lengths,
-) {
+  List<int> lengths, {
+  RtlCombiningMarkOrder combiningMarkOrder = RtlCombiningMarkOrder.beforeBase,
+}) {
   //Section 3:
   //1. seperate text into paragraphs
   //2. resulate each paragraph to its embeding levels of text
@@ -87,7 +107,10 @@ String logicalToVisual2(
   //(4) resolving neutral types.
   //(5) resolving implicit embedding levels.
 
-  final paragraphs = BidiString.fromLogical(logicalString).paragraphs;
+  final paragraphs = BidiString.fromLogical(
+    logicalString,
+    combiningMarkOrder: combiningMarkOrder,
+  ).paragraphs;
 
   final sb = <int>[];
   var sourceOffset = 0;

@@ -3,7 +3,8 @@ part of '../bidi.dart';
 /// Represents a paragraph in text.
 class Paragraph {
   /// Constructor.
-  Paragraph._(List<int> text, this._separator)
+  Paragraph._(
+      List<int> text, this._separator, RtlCombiningMarkOrder combiningMarkOrder)
       : n = Normalization.decompose(text) {
     _originalText.clear();
 
@@ -14,7 +15,8 @@ class Paragraph {
     n._compose();
 
     final embeddingLevel = _calculateEmbeddingLevel(n);
-    _recalculateCharactersEmbeddingLevels(n, embeddingLevel);
+    _recalculateCharactersEmbeddingLevels(
+        n, embeddingLevel, combiningMarkOrder);
 
     _removeBidiMarkers();
   }
@@ -109,7 +111,8 @@ class Paragraph {
   }
 
   // 3.3.2 Explicit Levels and Directions
-  void _recalculateCharactersEmbeddingLevels(Normalization n, int el) {
+  void _recalculateCharactersEmbeddingLevels(
+      Normalization n, int el, RtlCombiningMarkOrder combiningMarkOrder) {
     // This method is implemented in such a way it handles the string in logical order,
     // rather than visual order, so it is easier to handle complex layouts. That is why
     // it is placed BEFORE ReorderString rather than AFTER it, as its number suggests.
@@ -241,7 +244,11 @@ class Paragraph {
       start = limit;
     }
 
-    _reorderString(textData, el, n.hasNonspacingMark);
+    _reorderString(
+        textData,
+        el,
+        n.hasNonspacingMark &&
+            combiningMarkOrder == RtlCombiningMarkOrder.afterBase);
     _fixMirroredCharacters(textData);
 
     _bidiText.clear();
@@ -863,7 +870,7 @@ void _resolveImplicitTypes(
 void _reorderString(
   List<_CharData> textData,
   int embeddingLevel,
-  bool hasNonspacingMark,
+  bool restoreCombiningMarks,
 ) {
   //L1. On each line, reset the embedding level of the following characters to the paragraph embedding level:
   //    1. Segment separators,
@@ -925,8 +932,8 @@ void _reorderString(
     }
   }
 
-  // L3 restores base+mark clusters reversed inside odd-level runs.
-  if (!hasNonspacingMark) {
+  // L3 restores clusters only for renderers that expect marks after their base.
+  if (!restoreCombiningMarks) {
     return;
   }
 
