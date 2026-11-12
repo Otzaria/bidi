@@ -28,6 +28,16 @@ final visual = bidi.logicalToVisual('نوشته پارسی اینجا گذارد
 print(visual);
 ```
 
+## Combining marks and the output renderer
+
+UBA rule [L3](https://www.unicode.org/reports/tr9/#L3) depends on the renderer.
+The default `RtlCombiningMarkOrder.beforeBase` preserves the existing glyph
+order for renderers such as `dart_pdf`, whose RTL marks overhang to the right.
+Renderers that expect base-plus-mark clusters can pass
+`combiningMarkOrder: RtlCombiningMarkOrder.afterBase` to `BidiString.fromLogical`,
+`logicalToVisual` or `logicalToVisual2`. Source offsets and spans follow the
+selected visual order in both modes.
+
 ## Other Implementations
 
 This package is also written in Rust (apart from this package, which is written in Dart). If you are looking for a pure Rust implementation of this package, look at [https://crates.io/crates/bidi/](https://crates.io/crates/bidi/).
